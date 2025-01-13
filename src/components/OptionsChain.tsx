@@ -31,8 +31,9 @@ const ALPHA_VANTAGE_API_KEY = 'PUSIAKNSNY5KMB2P';
 const fetchOptionsData = async (symbol: string, toast: any) => {
   try {
     // First try Polygon.io
+    console.log(`Fetching Polygon.io options data for ${symbol}...`);
     const response = await fetch(
-      `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${symbol}&limit=100&expiration_date.lte=2024-12-31`,
+      `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${symbol}&limit=100`,
       {
         headers: {
           'Authorization': `Bearer ${POLYGON_API_KEY}`,
@@ -48,7 +49,12 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
     const data = await response.json();
     console.log("Polygon.io response:", data);
 
-    const options = data.results || [];
+    if (!data.results || data.results.length === 0) {
+      console.log("No options data found in Polygon.io, trying Finnhub...");
+      throw new Error("No options data found in Polygon.io");
+    }
+
+    const options = data.results;
     const calls = options
       .filter((opt: any) => opt.contract_type === 'call')
       .map((opt: any) => ({
@@ -75,6 +81,7 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
   } catch (error) {
     // Try Finnhub as fallback
     try {
+      console.log(`Fetching Finnhub options data for ${symbol}...`);
       const response = await fetch(
         `https://finnhub.io/api/v1/stock/option-chain?symbol=${symbol}&token=${FINNHUB_API_KEY}`
       );
@@ -87,7 +94,12 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
       const data = await response.json();
       console.log("Finnhub response:", data);
 
-      const calls = (data.data || [])
+      if (!data.data || data.data.length === 0) {
+        console.log("No options data found in Finnhub, trying Alpha Vantage...");
+        throw new Error("No options data found in Finnhub");
+      }
+
+      const calls = data.data
         .filter((opt: any) => opt.type === 'call')
         .map((opt: any) => ({
           strike: opt.strike,
@@ -98,7 +110,7 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
           openInterest: opt.openInterest || 0,
         }));
 
-      const puts = (data.data || [])
+      const puts = data.data
         .filter((opt: any) => opt.type === 'put')
         .map((opt: any) => ({
           strike: opt.strike,
@@ -113,6 +125,7 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
     } catch (error) {
       // Try Alpha Vantage as final fallback
       try {
+        console.log(`Fetching Alpha Vantage options data for ${symbol}...`);
         const response = await fetch(
           `https://www.alphavantage.co/query?function=OPTIONS&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`
         );
@@ -124,9 +137,17 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
         const data = await response.json();
         console.log("Alpha Vantage response:", data);
 
+        if (!data || Object.keys(data).length === 0) {
+          throw new Error("No options data found in Alpha Vantage");
+        }
+
         // Get the first expiration date's data
         const firstExpiry = Object.keys(data)[0];
         const optionsData = data[firstExpiry];
+
+        if (!optionsData?.calls && !optionsData?.puts) {
+          throw new Error("No options data found in Alpha Vantage response");
+        }
 
         const calls = (optionsData?.calls || []).map((opt: any) => ({
           strike: parseFloat(opt.strike),
