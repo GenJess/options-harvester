@@ -32,7 +32,7 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
   try {
     // First try Polygon.io
     const response = await fetch(
-      `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${symbol}&limit=100`,
+      `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${symbol}&limit=100&expiration_date.lte=2024-12-31`,
       {
         headers: {
           'Authorization': `Bearer ${POLYGON_API_KEY}`,
@@ -46,10 +46,32 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
     }
     
     const data = await response.json();
-    return {
-      calls: [], // Transform polygon data to our format
-      puts: [], // Transform polygon data to our format
-    };
+    console.log("Polygon.io response:", data);
+
+    const options = data.results || [];
+    const calls = options
+      .filter((opt: any) => opt.contract_type === 'call')
+      .map((opt: any) => ({
+        strike: parseFloat(opt.strike_price),
+        lastPrice: opt.last_trade?.price || 0,
+        bid: opt.bid || 0,
+        ask: opt.ask || 0,
+        volume: opt.volume || 0,
+        openInterest: opt.open_interest || 0,
+      }));
+
+    const puts = options
+      .filter((opt: any) => opt.contract_type === 'put')
+      .map((opt: any) => ({
+        strike: parseFloat(opt.strike_price),
+        lastPrice: opt.last_trade?.price || 0,
+        bid: opt.bid || 0,
+        ask: opt.ask || 0,
+        volume: opt.volume || 0,
+        openInterest: opt.open_interest || 0,
+      }));
+
+    return { calls, puts };
   } catch (error) {
     // Try Finnhub as fallback
     try {
@@ -63,10 +85,31 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
       }
       
       const data = await response.json();
-      return {
-        calls: [], // Transform finnhub data to our format
-        puts: [], // Transform finnhub data to our format
-      };
+      console.log("Finnhub response:", data);
+
+      const calls = (data.data || [])
+        .filter((opt: any) => opt.type === 'call')
+        .map((opt: any) => ({
+          strike: opt.strike,
+          lastPrice: opt.lastPrice || 0,
+          bid: opt.bid || 0,
+          ask: opt.ask || 0,
+          volume: opt.volume || 0,
+          openInterest: opt.openInterest || 0,
+        }));
+
+      const puts = (data.data || [])
+        .filter((opt: any) => opt.type === 'put')
+        .map((opt: any) => ({
+          strike: opt.strike,
+          lastPrice: opt.lastPrice || 0,
+          bid: opt.bid || 0,
+          ask: opt.ask || 0,
+          volume: opt.volume || 0,
+          openInterest: opt.openInterest || 0,
+        }));
+
+      return { calls, puts };
     } catch (error) {
       // Try Alpha Vantage as final fallback
       try {
@@ -79,10 +122,31 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
         }
         
         const data = await response.json();
-        return {
-          calls: [], // Transform alpha vantage data to our format
-          puts: [], // Transform alpha vantage data to our format
-        };
+        console.log("Alpha Vantage response:", data);
+
+        // Get the first expiration date's data
+        const firstExpiry = Object.keys(data)[0];
+        const optionsData = data[firstExpiry];
+
+        const calls = (optionsData?.calls || []).map((opt: any) => ({
+          strike: parseFloat(opt.strike),
+          lastPrice: parseFloat(opt.lastPrice) || 0,
+          bid: parseFloat(opt.bid) || 0,
+          ask: parseFloat(opt.ask) || 0,
+          volume: parseInt(opt.volume) || 0,
+          openInterest: parseInt(opt.openInterest) || 0,
+        }));
+
+        const puts = (optionsData?.puts || []).map((opt: any) => ({
+          strike: parseFloat(opt.strike),
+          lastPrice: parseFloat(opt.lastPrice) || 0,
+          bid: parseFloat(opt.bid) || 0,
+          ask: parseFloat(opt.ask) || 0,
+          volume: parseInt(opt.volume) || 0,
+          openInterest: parseInt(opt.openInterest) || 0,
+        }));
+
+        return { calls, puts };
       } catch (error) {
         toast({
           title: "Error",
