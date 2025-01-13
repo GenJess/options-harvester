@@ -28,9 +28,7 @@ const POLYGON_API_KEY = 'iSdy32szwiugL0_Auh_1ubG89967EveO';
 const FINNHUB_API_KEY = 'cu2d0ipr01ql7sc7aes0cu2d0ipr01ql7sc7aesg';
 const ALPHA_VANTAGE_API_KEY = 'PUSIAKNSNY5KMB2P';
 
-const fetchOptionsData = async (symbol: string) => {
-  const { toast } = useToast();
-
+const fetchOptionsData = async (symbol: string, toast: any) => {
   try {
     // First try Polygon.io
     const response = await fetch(
@@ -116,9 +114,11 @@ const LoadingSkeleton = () => (
 );
 
 const OptionsChain = ({ symbol }: OptionsChainProps) => {
+  const { toast } = useToast();
+  
   const { data, isLoading, error } = useQuery({
     queryKey: ["options", symbol],
-    queryFn: () => fetchOptionsData(symbol),
+    queryFn: () => fetchOptionsData(symbol, toast),
   });
 
   if (isLoading) {
