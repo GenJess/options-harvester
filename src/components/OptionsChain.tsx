@@ -24,6 +24,16 @@ interface OptionData {
   openInterest: number;
 }
 
+interface CombinedOptionRow {
+  putBid: number;
+  putAsk: number;
+  putVolume: number;
+  strike: number;
+  callBid: number;
+  callAsk: number;
+  callVolume: number;
+}
+
 const POLYGON_API_KEY = 'iSdy32szwiugL0_Auh_1ubG89967EveO';
 const FINNHUB_API_KEY = 'cu2d0ipr01ql7sc7aes0cu2d0ipr01ql7sc7aesg';
 const ALPHA_VANTAGE_API_KEY = 'PUSIAKNSNY5KMB2P';
@@ -183,20 +193,42 @@ const fetchOptionsData = async (symbol: string, toast: any) => {
 const LoadingSkeleton = () => (
   <div className="space-y-6">
     <Skeleton className="h-8 w-48" />
-    <div className="grid md:grid-cols-2 gap-6">
-      {[0, 1].map((i) => (
-        <Card key={i} className="p-4">
-          <Skeleton className="h-6 w-24 mb-4" />
-          <div className="space-y-2">
-            {[...Array(5)].map((_, index) => (
-              <Skeleton key={index} className="h-10 w-full" />
-            ))}
-          </div>
-        </Card>
-      ))}
-    </div>
+    <Card className="p-4">
+      <Skeleton className="h-6 w-24 mb-4" />
+      <div className="space-y-2">
+        {[...Array(10)].map((_, index) => (
+          <Skeleton key={index} className="h-10 w-full" />
+        ))}
+      </div>
+    </Card>
   </div>
 );
+
+const combineOptionsData = (calls: OptionData[], puts: OptionData[]): CombinedOptionRow[] => {
+  // Sort all strikes
+  const allStrikes = [...new Set([...calls, ...puts].map(opt => opt.strike))]
+    .sort((a, b) => b - a); // Sort descending
+
+  // Get middle index to center around ATM
+  const midIndex = Math.floor(allStrikes.length / 2);
+  const startIndex = Math.max(0, midIndex - 5);
+  const selectedStrikes = allStrikes.slice(startIndex, startIndex + 10);
+
+  return selectedStrikes.map(strike => {
+    const call = calls.find(c => c.strike === strike) || { bid: 0, ask: 0, volume: 0 };
+    const put = puts.find(p => p.strike === strike) || { bid: 0, ask: 0, volume: 0 };
+    
+    return {
+      putBid: put.bid,
+      putAsk: put.ask,
+      putVolume: put.volume,
+      strike,
+      callBid: call.bid,
+      callAsk: call.ask,
+      callVolume: call.volume,
+    };
+  });
+};
 
 const OptionsChain = ({ symbol }: OptionsChainProps) => {
   const { toast } = useToast();
@@ -218,50 +250,42 @@ const OptionsChain = ({ symbol }: OptionsChainProps) => {
     );
   }
 
+  const combinedData = combineOptionsData(data?.calls || [], data?.puts || []);
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold">Options Chain for {symbol}</h2>
       
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card className="p-4">
-          <h3 className="text-lg font-medium mb-4">Calls</h3>
-          <OptionsTable options={data?.calls || []} />
-        </Card>
-
-        <Card className="p-4">
-          <h3 className="text-lg font-medium mb-4">Puts</h3>
-          <OptionsTable options={data?.puts || []} />
-        </Card>
-      </div>
+      <Card className="p-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-right">Put Bid</TableHead>
+              <TableHead className="text-right">Put Ask</TableHead>
+              <TableHead className="text-right">Put Vol</TableHead>
+              <TableHead className="text-center font-bold">Strike</TableHead>
+              <TableHead className="text-right">Call Bid</TableHead>
+              <TableHead className="text-right">Call Ask</TableHead>
+              <TableHead className="text-right">Call Vol</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {combinedData.map((row, index) => (
+              <TableRow key={index}>
+                <TableCell className="text-right">{row.putBid.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{row.putAsk.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{row.putVolume}</TableCell>
+                <TableCell className="text-center font-semibold">{row.strike.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{row.callBid.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{row.callAsk.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{row.callVolume}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   );
 };
-
-const OptionsTable = ({ options }: { options: OptionData[] }) => (
-  <Table>
-    <TableHeader>
-      <TableRow>
-        <TableHead>Strike</TableHead>
-        <TableHead>Last</TableHead>
-        <TableHead>Bid</TableHead>
-        <TableHead>Ask</TableHead>
-        <TableHead>Volume</TableHead>
-        <TableHead>OI</TableHead>
-      </TableRow>
-    </TableHeader>
-    <TableBody>
-      {options.map((option, index) => (
-        <TableRow key={index}>
-          <TableCell>{option.strike}</TableCell>
-          <TableCell>{option.lastPrice}</TableCell>
-          <TableCell>{option.bid}</TableCell>
-          <TableCell>{option.ask}</TableCell>
-          <TableCell>{option.volume}</TableCell>
-          <TableCell>{option.openInterest}</TableCell>
-        </TableRow>
-      ))}
-    </TableBody>
-  </Table>
-);
 
 export default OptionsChain;
