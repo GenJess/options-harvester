@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 interface OptionsChainProps {
   symbol: string;
@@ -23,34 +24,96 @@ interface OptionData {
   openInterest: number;
 }
 
+const POLYGON_API_KEY = 'iSdy32szwiugL0_Auh_1ubG89967EveO';
+const FINNHUB_API_KEY = 'cu2d0ipr01ql7sc7aes0cu2d0ipr01ql7sc7aesg';
+const ALPHA_VANTAGE_API_KEY = 'PUSIAKNSNY5KMB2P';
+
 const fetchOptionsData = async (symbol: string) => {
+  const { toast } = useToast();
+
   try {
     // First try Polygon.io
     const response = await fetch(
       `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${symbol}&limit=100`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.POLYGON_API_KEY}`,
+          'Authorization': `Bearer ${POLYGON_API_KEY}`,
         },
       }
     );
     
     if (!response.ok) {
+      console.error("Polygon.io API failed, falling back to Finnhub");
       throw new Error("Polygon.io API failed");
     }
     
     const data = await response.json();
-    // Transform the data to our format
     return {
       calls: [], // Transform polygon data to our format
       puts: [], // Transform polygon data to our format
     };
   } catch (error) {
-    console.error("Polygon.io API failed, falling back to Finnhub");
-    // Implement fallback to Finnhub or Alpha Vantage here
-    throw error;
+    // Try Finnhub as fallback
+    try {
+      const response = await fetch(
+        `https://finnhub.io/api/v1/stock/option-chain?symbol=${symbol}&token=${FINNHUB_API_KEY}`
+      );
+      
+      if (!response.ok) {
+        console.error("Finnhub API failed, falling back to Alpha Vantage");
+        throw new Error("Finnhub API failed");
+      }
+      
+      const data = await response.json();
+      return {
+        calls: [], // Transform finnhub data to our format
+        puts: [], // Transform finnhub data to our format
+      };
+    } catch (error) {
+      // Try Alpha Vantage as final fallback
+      try {
+        const response = await fetch(
+          `https://www.alphavantage.co/query?function=OPTIONS&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`
+        );
+        
+        if (!response.ok) {
+          throw new Error("All API attempts failed");
+        }
+        
+        const data = await response.json();
+        return {
+          calls: [], // Transform alpha vantage data to our format
+          puts: [], // Transform alpha vantage data to our format
+        };
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch options data from all providers",
+          variant: "destructive",
+        });
+        throw error;
+      }
+    }
   }
 };
+
+const LoadingSkeleton = () => (
+  <div className="space-y-6">
+    <Skeleton className="h-8 w-48" />
+    <div className="grid md:grid-cols-2 gap-6">
+      {[0, 1].map((i) => (
+        <Card key={i} className="p-4">
+          <Skeleton className="h-6 w-24 mb-4" />
+          <div className="space-y-2">
+            {[...Array(5)].map((_, index) => (
+              <Skeleton key={index} className="h-10 w-full" />
+            ))}
+          </div>
+        </Card>
+      ))}
+    </div>
+  </div>
+);
 
 const OptionsChain = ({ symbol }: OptionsChainProps) => {
   const { data, isLoading, error } = useQuery({
@@ -114,24 +177,6 @@ const OptionsTable = ({ options }: { options: OptionData[] }) => (
       ))}
     </TableBody>
   </Table>
-);
-
-const LoadingSkeleton = () => (
-  <div className="space-y-6">
-    <Skeleton className="h-8 w-48" />
-    <div className="grid md:grid-cols-2 gap-6">
-      {[0, 1].map((i) => (
-        <Card key={i} className="p-4">
-          <Skeleton className="h-6 w-24 mb-4" />
-          <div className="space-y-2">
-            {[...Array(5)].map((_, index) => (
-              <Skeleton key={index} className="h-10 w-full" />
-            ))}
-          </div>
-        </Card>
-      ))}
-    </div>
-  </div>
 );
 
 export default OptionsChain;
